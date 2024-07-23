@@ -156,6 +156,8 @@ if prompt := st.chat_input("Query"):
                 st.session_state.messages.append(
                         {"role": "assistant", "content": content_response, "id": feedback_id})
                 
+                st.experimental_rerun()
+                
                 
             else:
                 print(response)
