@@ -3,6 +3,7 @@ import uuid
 import requests
 import streamlit as st
 import sqlite3
+import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,13 +20,18 @@ CREATE TABLE IF NOT EXISTS feedback (
     question TEXT,
     answer TEXT,
     feedback INTEGER,
-    desired_answer TEXT
+    desired_answer TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 )
 ''')
 conn.commit()
 
 if "user_id" not in st.session_state:
-    st.session_state["user_id"] = uuid.uuid4().int & (1<<32)-1
+    full_uuid = uuid.uuid4()
+    user_id_part1 = full_uuid.int & (1<<32)-1 
+    user_id_part2 = (full_uuid.int >> 32) & (1<<32)-1  
+    st.session_state["user_id"] = (user_id_part1 << 32) | user_id_part2  
+    print(st.session_state["user_id"])
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "feedback" not in st.session_state:
@@ -148,9 +154,9 @@ if prompt := st.chat_input("Query"):
                 feedback_id = str(uuid.uuid4())
                 
                 c.execute('''
-                INSERT INTO feedback (uuid, userid, question, answer, feedback, desired_answer)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ''', (feedback_id, st.session_state["user_id"], prompt, content_response, 0, "NULL"))
+                INSERT INTO feedback (uuid, userid, question, answer, feedback, desired_answer, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?,?)
+                ''', (feedback_id, st.session_state["user_id"], prompt, content_response, 0, "NULL" , datetime.datetime.now()))
                 conn.commit()
 
                 st.session_state.messages.append(
