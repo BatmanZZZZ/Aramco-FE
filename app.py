@@ -14,8 +14,8 @@ c = conn.cursor()
 # Create feedback table if it doesn't exist
 c.execute('''
 CREATE TABLE IF NOT EXISTS feedback (
-    id TEXT PRIMARY KEY,
-    userid TEXT,
+    uuid TEXT PRIMARY KEY,
+    userid INTEGER,
     question TEXT,
     answer TEXT,
     feedback INTEGER,
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS feedback (
 conn.commit()
 
 if "user_id" not in st.session_state:
-    st.session_state["user_id"] = str(uuid.uuid4())
+    st.session_state["user_id"] = uuid.uuid4().int >> 64
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "feedback" not in st.session_state:
@@ -39,7 +39,7 @@ if "current_feedback_id" not in st.session_state:
 if "current_feedback_question" not in st.session_state:
     st.session_state["current_feedback_question"] = None
             
-st.title("Tradebot - V1")
+st.title("Aramco - V1")
 
 for i, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
@@ -52,11 +52,23 @@ for i, message in enumerate(st.session_state.messages):
                     if st.button("👍", key=f"like_{i}"):
                         feedback_id = st.session_state.messages[i]["id"]
                         c.execute('''
-                        INSERT OR REPLACE INTO feedback (id, userid, question, answer, feedback, desired_answer)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (feedback_id, st.session_state["user_id"], st.session_state.messages[i-1]["content"], st.session_state.messages[i]["content"], 1, "NULL"))
+                        SELECT desired_answer FROM feedback WHERE uuid = ?
+                        ''', (feedback_id,))
+                        result = c.fetchone()
+                        desired_answer = result[0] if result else "NULL"
+                        if result:
+                            c.execute('''
+                            UPDATE feedback
+                            SET feedback = 1
+                            WHERE uuid = ?
+                            ''', (feedback_id,))
+                        else:
+                            c.execute('''
+                            INSERT INTO feedback (uuid, userid, question, answer, feedback, desired_answer)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ''', (feedback_id, st.session_state["user_id"], st.session_state.messages[i-1]["content"], st.session_state.messages[i]["content"], 1, desired_answer))
                         conn.commit()
-                        st.experimental_rerun()
+                        # st.experimental_rerun()
                 with col5:
                     if st.button("👎", key=f"dislike_{i}"):
                         feedback_id = st.session_state.messages[i]["id"]
@@ -64,11 +76,23 @@ for i, message in enumerate(st.session_state.messages):
                         st.session_state["current_feedback_id"] = feedback_id
                         st.session_state["current_feedback_question"] = st.session_state.messages[i-1]["content"]
                         c.execute('''
-                        INSERT OR REPLACE INTO feedback (id, userid, question, answer, feedback, desired_answer)
-                        VALUES (?, ?, ?, ?, ?, ?)
-                        ''', (feedback_id, st.session_state["user_id"], st.session_state.messages[i-1]["content"], st.session_state.messages[i]["content"], -1, "NULL"))
+                        SELECT desired_answer FROM feedback WHERE uuid = ?
+                        ''', (feedback_id,))
+                        result = c.fetchone()
+                        desired_answer = result[0] if result else "NULL"
+                        if result:
+                            c.execute('''
+                            UPDATE feedback
+                            SET feedback = -1
+                            WHERE uuid = ?
+                            ''', (feedback_id,))
+                        else:
+                            c.execute('''
+                            INSERT INTO feedback (uuid, userid, question, answer, feedback, desired_answer)
+                            VALUES (?, ?, ?, ?, ?, ?)
+                            ''', (feedback_id, st.session_state["user_id"], st.session_state.messages[i-1]["content"], st.session_state.messages[i]["content"], -1, desired_answer))
                         conn.commit()
-                        st.experimental_rerun()
+                        # st.experimental_rerun()
 
 if st.session_state["show_input"]:
     st.write(f'')
@@ -79,11 +103,12 @@ if st.session_state["show_input"]:
         c.execute('''
         UPDATE feedback
         SET desired_answer = ?
-        WHERE id = ?
+        WHERE uuid = ?
         ''', (desired_answer, feedback_id))
         conn.commit()
-        st.session_state["show_input"] = False
         st.session_state["current_feedback_id"] = None
+        st.session_state["show_input"] = False
+        
         st.experimental_rerun()
 
 if prompt := st.chat_input("Query"):
@@ -98,12 +123,16 @@ if prompt := st.chat_input("Query"):
         with st.spinner("Thinking..."):
             
             endpoint = os.getenv('LOCALHOST_API_URL')
+            print(endpoint)
             payload = {
-                "user_query": prompt,
-                "user_id": st.session_state["user_id"],
+                "query": prompt,
+                "user_id": st.session_state["user_id"] ,
+                "audio_path": "null",
+                "video_path": "null"
             }
             
             response = requests.post(endpoint, json=payload, stream=True)
+
 
             content_response = ""
             if response.status_code == 200:
@@ -117,14 +146,16 @@ if prompt := st.chat_input("Query"):
                 ai_message = {'output_key': content_response}
                 
                 feedback_id = str(uuid.uuid4())
-                st.session_state.messages.append(
-                        {"role": "assistant", "content": content_response, "id": feedback_id})
+                
                 c.execute('''
-                INSERT INTO feedback (id, userid, question, answer, feedback, desired_answer)
+                INSERT INTO feedback (uuid, userid, question, answer, feedback, desired_answer)
                 VALUES (?, ?, ?, ?, ?, ?)
                 ''', (feedback_id, st.session_state["user_id"], prompt, content_response, 0, "NULL"))
                 conn.commit()
-                st.experimental_rerun()
+
+                st.session_state.messages.append(
+                        {"role": "assistant", "content": content_response, "id": feedback_id})
+                
                 
             else:
                 print(response)
