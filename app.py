@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS feedback (
 conn.commit()
 
 if "user_id" not in st.session_state:
-    st.session_state["user_id"] = uuid.uuid4().int >> 64
+    st.session_state["user_id"] = uuid.uuid4().int & (1<<32)-1
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "feedback" not in st.session_state:
