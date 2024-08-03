@@ -30,7 +30,8 @@ if "user_id" not in st.session_state:
     full_uuid = uuid.uuid4()
     user_id_part1 = full_uuid.int & (1<<32)-1 
     user_id_part2 = (full_uuid.int >> 32) & (1<<32)-1  
-    st.session_state["user_id"] = (user_id_part1 << 32) | user_id_part2  
+    # st.session_state["user_id"] = (user_id_part1 << 32) | user_id_part2  
+    st.session_state["user_id"] = user_id_part1
     print(st.session_state["user_id"])
 if "messages" not in st.session_state:
     st.session_state.messages = []
